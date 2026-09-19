@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh Opencode Go usage every 15 minutes
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=15min
+Unit=omarchy-agent-usage-opencode.service
+
+[Install]
+WantedBy=timers.target

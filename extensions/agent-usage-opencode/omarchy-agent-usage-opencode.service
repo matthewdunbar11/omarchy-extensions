@@ -1,0 +1,8 @@
+[Unit]
+Description=Refresh Opencode Go usage record for Omarchy agents panel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'tmp=$(mktemp "%h/.local/state/omarchy/agents/usage/.opencode.XXXXXX"); %h/.local/bin/omarchy-agent-usage-opencode --limits-only > "$tmp" && mv "$tmp" "%h/.local/state/omarchy/agents/usage/opencode.json"'

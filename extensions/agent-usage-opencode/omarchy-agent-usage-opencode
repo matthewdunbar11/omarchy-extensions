@@ -1,0 +1,318 @@
+#!/usr/bin/python3
+# omarchy:summary=Print the Opencode Go usage record as JSON
+# omarchy:args=[--force] [--limits-only]
+# omarchy:hidden=true
+"""Collect Opencode Go usage into one display-ready JSON record.
+
+Limits come from GET https://opencode.ai/zen/go/v1/usage (Bearer API key).
+Local stats come from opencode.db messages with providerID == "opencode-go".
+The agents panel only ever reads the JSON this prints.
+"""
+
+import argparse
+import json
+import os
+import sqlite3
+import sys
+import urllib.error
+import urllib.request
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from typing import Any
+
+AGENT_ID = "opencode"
+AGENT_NAME = "Opencode Go"
+AUTH_HELP = "Run `/connect` in opencode and select OpenCode Go, or set OPENCODE_GO_API_KEY."
+USAGE_ENDPOINT = "https://opencode.ai/zen/go/v1/usage"
+
+
+def number(value: Any) -> int:
+    try:
+        return max(0, int(float(value or 0)))
+    except (TypeError, ValueError):
+        return 0
+
+
+def local_day(value: Any) -> str:
+    now = datetime.now()
+    if value is None:
+        return now.strftime("%Y-%m-%d")
+    if isinstance(value, (int, float)):
+        ms = float(value)
+        if ms > 10_000_000_000:
+            ms = ms / 1000
+        try:
+            return datetime.fromtimestamp(ms).strftime("%Y-%m-%d")
+        except Exception:
+            return now.strftime("%Y-%m-%d")
+    text = str(value)
+    try:
+        if text.endswith("Z"):
+            dt = datetime.fromisoformat(text[:-1] + "+00:00")
+        else:
+            dt = datetime.fromisoformat(text)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone()
+        return dt.strftime("%Y-%m-%d")
+    except Exception:
+        return now.strftime("%Y-%m-%d")
+
+
+def model_name(raw: Any) -> str:
+    value = str(raw or "unknown").rstrip("/").split("/")[-1]
+    return value if value else "unknown"
+
+
+def opencode_auth_path() -> Path:
+    data_home = Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share"))
+    return data_home / "opencode" / "auth.json"
+
+
+def resolve_auth_value(entry: Any) -> str:
+    if not entry:
+        return ""
+    if isinstance(entry, str):
+        return entry.strip()
+    if isinstance(entry, dict):
+        for key in ("key", "api_key", "apiKey", "token", "access"):
+            value = entry.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return ""
+
+
+def get_api_key() -> str:
+    for env_key in ("OPENCODE_GO_API_KEY", "OPENCODE_API_KEY", "ZEN_API_KEY"):
+        value = str(os.environ.get(env_key, "") or "").strip()
+        if value:
+            return value
+    try:
+        parsed = json.loads(opencode_auth_path().read_text())
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(parsed, dict):
+        return ""
+    for alias in ("opencode-go", "opencode", "go"):
+        value = resolve_auth_value(parsed.get(alias))
+        if value:
+            return value
+    return ""
+
+
+def fetch_limits(api_key: str) -> dict[str, Any]:
+    """Probe the Go usage endpoint. Returns {'limits': [...], 'error': str}."""
+    request = urllib.request.Request(
+        USAGE_ENDPOINT,
+        headers={
+            "Authorization": "Bearer " + api_key,
+            "Accept": "application/json",
+            "User-Agent": "omarchy-agent-usage-opencode/1.0",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except urllib.error.HTTPError as error:
+        if error.code in (401, 403):
+            return {"limits": [], "error": "auth", "help": "Opencode Go API key was rejected. Reconnect with `/connect`."}
+        return {"limits": [], "error": f"http-{error.code}", "help": f"Opencode Go usage endpoint returned status {error.code}."}
+    except Exception:
+        return {"limits": [], "error": "transport", "help": "Couldn't reach the Opencode Go usage endpoint. Retrying shortly."}
+    if not isinstance(payload, dict):
+        return {"limits": [], "error": "empty", "help": "Opencode Go usage endpoint returned no data."}
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return {"limits": [], "error": "empty", "help": "Opencode Go usage endpoint returned no data."}
+
+    # API percent is 0-100 used; panel wants 0-1 used.
+    windows = (
+        ("rolling", "Session (5-hour)", "Session"),
+        ("weekly", "Weekly (7-day)", "Weekly"),
+        ("monthly", "Monthly (30-day)", "Monthly"),
+    )
+    limits = []
+    for key, label, title in windows:
+        bucket = usage.get(key)
+        if not isinstance(bucket, dict):
+            continue
+        try:
+            percent_raw = float(bucket.get("percent"))
+        except (TypeError, ValueError):
+            continue
+        if percent_raw < 0:
+            continue
+        resets_at = str(bucket.get("resetsAt") or "")
+        limits.append(
+            {
+                "label": label,
+                "title": title,
+                "percent": max(0.0, min(1.0, percent_raw / 100.0)),
+                "resetsAt": resets_at,
+            }
+        )
+    if not limits:
+        return {"limits": [], "error": "empty", "help": "Opencode Go usage endpoint returned no limits."}
+    return {"limits": limits, "error": ""}
+
+
+def scan_opencode_sessions() -> dict[str, Any]:
+    """Aggregate local token stats for providerID == 'opencode-go'."""
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    recent_dates = [(now - timedelta(days=offset)).strftime("%Y-%m-%d") for offset in range(6, -1, -1)]
+    recent = {day: 0 for day in recent_dates}
+    today_tokens_by_model: dict[str, int] = {}
+    model_usage: dict[str, dict[str, int]] = {}
+    today_sessions: set[str] = set()
+    total_sessions: set[str] = set()
+    active_days: set[str] = set()
+    today_prompts = 0
+    today_total_tokens = 0
+    total_prompts = 0
+
+    db = Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")) / "opencode" / "opencode.db"
+    if not db.is_file():
+        return _stats_payload(
+            today, recent_dates, recent, today_tokens_by_model, model_usage,
+            today_sessions, total_sessions, active_days,
+            today_prompts, today_total_tokens, total_prompts,
+        )
+    try:
+        conn = sqlite3.connect(db.resolve().as_uri() + "?mode=ro", uri=True, timeout=2)
+    except sqlite3.Error:
+        return _stats_payload(
+            today, recent_dates, recent, today_tokens_by_model, model_usage,
+            today_sessions, total_sessions, active_days,
+            today_prompts, today_total_tokens, total_prompts,
+        )
+    try:
+        conn.execute("PRAGMA query_only = ON")
+        rows = conn.execute(
+            "SELECT session_id, data FROM message"
+            " WHERE data LIKE '%\"providerID\"%:%\"opencode-go\"%'"
+            " AND CASE WHEN json_valid(data) THEN json_extract(data, '$.role') END = 'assistant'"
+            " AND CASE WHEN json_valid(data) THEN json_extract(data, '$.providerID') END = 'opencode-go'"
+        )
+        for session_id, raw in rows:
+            try:
+                entry = json.loads(raw)
+                if not isinstance(entry, dict) or entry.get("role") != "assistant":
+                    continue
+                if str(entry.get("providerID") or "") != "opencode-go":
+                    continue
+                tokens = entry.get("tokens") or {}
+                cache = tokens.get("cache") or {}
+                input_tokens = number(tokens.get("input"))
+                output_tokens = number(tokens.get("output")) + number(tokens.get("reasoning"))
+                cache_read = number(cache.get("read"))
+                cache_write = number(cache.get("write"))
+                total = input_tokens + output_tokens + cache_read + cache_write
+                if total <= 0:
+                    continue
+                day = local_day((entry.get("time") or {}).get("created"))
+                model = model_name(entry.get("modelID"))
+            except Exception:
+                continue
+            total_prompts += 1
+            total_sessions.add(str(session_id))
+            active_days.add(day)
+            bucket = model_usage.setdefault(
+                model,
+                {"inputTokens": 0, "outputTokens": 0, "cacheReadInputTokens": 0, "cacheCreationInputTokens": 0},
+            )
+            bucket["inputTokens"] += input_tokens
+            bucket["outputTokens"] += output_tokens
+            bucket["cacheReadInputTokens"] += cache_read
+            bucket["cacheCreationInputTokens"] += cache_write
+            if day in recent:
+                recent[day] += total
+            if day == today:
+                today_prompts += 1
+                today_sessions.add(str(session_id))
+                today_total_tokens += total
+                today_tokens_by_model[model] = today_tokens_by_model.get(model, 0) + total
+    except sqlite3.Error as exc:
+        print(f"omarchy-agent-usage-opencode: opencode.db scan stopped ({exc})", file=sys.stderr)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return _stats_payload(
+        today, recent_dates, recent, today_tokens_by_model, model_usage,
+        today_sessions, total_sessions, active_days,
+        today_prompts, today_total_tokens, total_prompts,
+    )
+
+
+def _stats_payload(today, recent_dates, recent, today_tokens_by_model, model_usage,
+                   today_sessions, total_sessions, active_days,
+                   today_prompts, today_total_tokens, total_prompts) -> dict[str, Any]:
+    return {
+        "todayPrompts": today_prompts,
+        "todaySessions": len(today_sessions),
+        "todayTotalTokens": today_total_tokens,
+        "todayTokensByModel": today_tokens_by_model,
+        "recentDays": [{"date": day, "messageCount": recent[day]} for day in recent_dates],
+        "totalPrompts": total_prompts,
+        "totalSessions": len(total_sessions),
+        "activeDays": len(active_days),
+        "activeDates": sorted(active_days),
+        "modelUsage": model_usage,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Print the Opencode Go usage record as JSON")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("--limits-only", action="store_true")
+    args = parser.parse_args()
+
+    stats = scan_opencode_sessions()
+    api_key = get_api_key()
+    if not api_key:
+        record = {
+            "schemaVersion": 1,
+            "id": AGENT_ID,
+            "name": AGENT_NAME,
+            "updatedAt": datetime.now(timezone.utc).isoformat(),
+            "ready": stats.get("totalPrompts", 0) > 0,
+            "hasLocalStats": True,
+            "tierLabel": "Go",
+            "usageStatusText": "Waiting for auth" if stats.get("totalPrompts", 0) <= 0 else "",
+            "authHelpText": AUTH_HELP,
+            "limits": [],
+        }
+        record.update(stats)
+        print(json.dumps(record, separators=(",", ":")))
+        return 0
+
+    probed = fetch_limits(api_key)
+    limits = probed.get("limits", [])
+    error = probed.get("error", "")
+    record = {
+        "schemaVersion": 1,
+        "id": AGENT_ID,
+        "name": AGENT_NAME,
+        "updatedAt": datetime.now(timezone.utc).isoformat(),
+        "ready": stats.get("totalPrompts", 0) > 0 or len(limits) > 0,
+        "hasLocalStats": True,
+        "tierLabel": "Go",
+        "usageStatusText": "",
+        "authHelpText": AUTH_HELP if error == "auth" else "",
+        "limits": limits,
+    }
+    if error == "transport" and not limits:
+        record["usageStatusText"] = "Go limits unavailable"
+        record["authHelpText"] = probed.get("help", "")
+        record["retryAdvised"] = True
+    elif error and not limits:
+        record["usageStatusText"] = "Go limits unavailable"
+        record["authHelpText"] = probed.get("help", AUTH_HELP)
+    record.update(stats)
+    print(json.dumps(record, separators=(",", ":")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
