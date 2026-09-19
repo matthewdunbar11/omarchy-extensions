@@ -631,7 +631,10 @@ Panel {
                 Text {
                   id: eventTime
                   textFormat: Text.PlainText
-                  width: Style.space(92)
+                  // Wide enough for the longest 12-hour range,
+                  // "12:00 PM–12:00 PM", without crowding the title.
+                  width: Style.space(116)
+                  elide: Text.ElideRight
                   text: root.timeRange(modelData)
                   color: Style.selectedStateColor(root.contentForeground, Color.accent)
                   font.family: root.contentFontFamily

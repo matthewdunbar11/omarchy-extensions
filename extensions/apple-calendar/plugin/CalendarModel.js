@@ -135,10 +135,25 @@ function sortEvents(list) {
   })
 }
 
-// "09:00–10:30" or "All day" for the list rows.
+// "5:30 PM" from the cache's 24-hour "HH:MM". The panel speaks US English
+// throughout (like the day names), so clock times do too. Anything that is
+// not a plain "HH:MM" is passed through untouched.
+function formatTime12(value) {
+  var text = String(value || "")
+  var match = /^(\d{1,2}):(\d{2})/.exec(text)
+  if (!match) return text
+  var hours = Number(match[1])
+  if (!isFinite(hours)) return text
+  var suffix = hours < 12 ? "AM" : "PM"
+  var hour12 = hours % 12
+  if (hour12 === 0) hour12 = 12
+  return hour12 + ":" + match[2] + " " + suffix
+}
+
+// "5:30 PM–7:30 PM" or "All day" for the list rows.
 function timeRangeText(ev) {
   if (ev.allDay) return "All day"
-  var s = String(ev.start || ""), e = String(ev.end || "")
+  var s = formatTime12(ev.start), e = formatTime12(ev.end)
   if (s && e) return s + "–" + e
   return s || e || ""
 }
@@ -168,6 +183,7 @@ if (typeof module !== "undefined") {
     hasEvents: hasEvents,
     eventCount: eventCount,
     sortEvents: sortEvents,
+    formatTime12: formatTime12,
     timeRangeText: timeRangeText
   }
 }

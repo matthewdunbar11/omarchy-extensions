@@ -67,8 +67,23 @@ var evs = [
 var sorted = M.sortEvents(evs);
 assert.strictEqual(sorted[0].title, "holiday");
 assert.strictEqual(sorted[1].title, "a");
-assert.strictEqual(M.timeRangeText(sorted[1]), "09:00–09:30");
+assert.strictEqual(M.timeRangeText(sorted[1]), "9:00 AM–9:30 AM");
 assert.strictEqual(M.timeRangeText(sorted[0]), "All day");
+
+// formatTime12: 24-hour cache strings -> US 12-hour, edge cases included.
+assert.strictEqual(M.formatTime12("00:00"), "12:00 AM");
+assert.strictEqual(M.formatTime12("00:30"), "12:30 AM");
+assert.strictEqual(M.formatTime12("09:05"), "9:05 AM");
+assert.strictEqual(M.formatTime12("12:00"), "12:00 PM");
+assert.strictEqual(M.formatTime12("12:45"), "12:45 PM");
+assert.strictEqual(M.formatTime12("13:00"), "1:00 PM");
+assert.strictEqual(M.formatTime12("17:30"), "5:30 PM");
+assert.strictEqual(M.formatTime12("23:59"), "11:59 PM");
+assert.strictEqual(M.formatTime12(""), "");
+assert.strictEqual(M.formatTime12("noon"), "noon");
+assert.strictEqual(M.timeRangeText({ start: "17:30", end: "19:30", allDay: false }), "5:30 PM–7:30 PM");
+assert.strictEqual(M.timeRangeText({ start: "11:30", end: "13:00", allDay: false }), "11:30 AM–1:00 PM");
+assert.strictEqual(M.timeRangeText({ start: "09:00", end: "", allDay: false }), "9:00 AM");
 
 var days = { "2026-09-19": evs };
 assert.strictEqual(M.hasEvents(days, "2026-09-19"), true);
