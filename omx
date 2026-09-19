@@ -9,7 +9,12 @@
 #   omx status <name>
 set -euo pipefail
 
-OMX_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SRC="${BASH_SOURCE[0]}"
+# Follow symlinks (e.g. ~/.local/bin/omx -> repo) so EXT_DIR always resolves.
+if command -v readlink >/dev/null 2>&1; then
+  SRC="$(readlink -f "$SRC")"
+fi
+OMX_ROOT="$(cd -- "$(dirname -- "$SRC")" && pwd)"
 EXT_DIR="$OMX_ROOT/extensions"
 HAVE_GUM=0
 command -v gum >/dev/null 2>&1 && HAVE_GUM=1
