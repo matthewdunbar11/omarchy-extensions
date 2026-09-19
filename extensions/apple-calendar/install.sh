@@ -31,11 +31,12 @@ ask() { # prompt -> yes/no; non-interactive always no
 }
 
 [[ -n $SWAP ]] || SWAP=$(ask "Replace the bar's stock clock with Apple Calendar?")
-if [[ -f $HOME/.config/apple-calendar/config ]]; then
-  echo "(already signed in — skipping sign-in question)"
-  LOGIN=no
-elif [[ -z $LOGIN ]]; then
-  LOGIN=$(ask "Sign in to iCloud Calendar now (Apple ID + app-specific password)?")
+if [[ -z $LOGIN ]]; then
+  if [[ -f $HOME/.config/apple-calendar/config ]]; then
+    LOGIN=$(ask "Update saved iCloud credentials (Apple ID + app-specific password)?")
+  else
+    LOGIN=$(ask "Sign in to iCloud Calendar now (Apple ID + app-specific password)?")
+  fi
 fi
 
 APPDIR="${XDG_DATA_HOME:-$HOME/.local/share}/omx/apple-calendar"
