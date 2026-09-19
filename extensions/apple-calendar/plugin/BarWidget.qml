@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 
@@ -74,15 +75,12 @@ BarWidget {
     }
   }
 
-  IpcHandler {
-    target: "omx.apple-calendar"
-
-    function refresh(): void { root.broadcast("refresh") }
-    function open(): void { root.open() }
-    function close(): void { root.close() }
-    function show(): void { root.open() }
-    function hide(): void { root.close() }
-    function toggle(): void { root.togglePanel() }
+  // NOTE: no IpcHandler here. Quickshell.Io resolves for stock plugins but
+  // the type fails to resolve in this user plugin on the systems tested
+  // ("IpcHandler is not a type"), which fails the whole widget. The panel is
+  // fully usable without IPC (click toggles it); revisit if upstream changes.
+  function refreshIpcHint() {
+    // kept as a plain function so external callers get a no-op, not an error
   }
 
   WidgetButton {

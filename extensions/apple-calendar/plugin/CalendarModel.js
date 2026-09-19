@@ -46,7 +46,29 @@ function weekdayOrder(weekStart) {
   return out
 }
 
-// Always six rows of seven days so the popup never changes height.
+// The name stored back into shell.json when the grid's "W" heading is
+// clicked, and the day it flips to (Monday <-> Sunday, the two conventions
+// people actually switch between).
+function weekStartSettingName(index) {
+  return WEEKDAY_NAMES[normalizedWeekStart(index, 1)]
+}
+
+function toggledWeekStart(index) {
+  return normalizedWeekStart(index, 1) === 1 ? 0 : 1
+}
+
+// ISO-8601 week number: the week owning the Thursday of that date's
+// Monday-based week. Mirrors the clock widget's 'ww' format token.
+function isoWeek(year, month, day) {
+  var date = new Date(Date.UTC(year, month, day))
+  var weekday = date.getUTCDay() || 7
+  date.setUTCDate(date.getUTCDate() + 4 - weekday)
+  var yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1))
+  return Math.ceil(((date.getTime() - yearStart.getTime()) / MS_PER_DAY + 1) / 7)
+}
+
+// Always six rows of seven days so the popup never changes height. Each row
+// carries its ISO week number, the way the stock clock's grid does.
 function monthGrid(year, month, weekStart, todayKey) {
   var start = normalizedWeekStart(weekStart, 1)
   var leading = (new Date(year, month, 1).getDay() - start + 7) % 7
@@ -55,9 +77,11 @@ function monthGrid(year, month, weekStart, todayKey) {
   var weeks = []
   for (var w = 0; w < 6; w++) {
     var days = []
+    var thursday = null
     for (var d = 0; d < 7; d++) {
       var y = cursor.getFullYear(), m = cursor.getMonth(), dd = cursor.getDate()
       var weekday = cursor.getDay()
+      if (weekday === 4) thursday = { year: y, month: m, day: dd }
       days.push({
         key: dateKey(y, m, dd),
         year: y, month: m, day: dd, weekday: weekday,
@@ -67,7 +91,10 @@ function monthGrid(year, month, weekStart, todayKey) {
       })
       cursor.setDate(cursor.getDate() + 1)
     }
-    weeks.push({ days: days })
+    // Number every row by the ISO week owning its Thursday, so a row that
+    // straddles two weeks still reports the one it mostly belongs to.
+    var anchor = thursday || days[0]
+    weeks.push({ week: isoWeek(anchor.year, anchor.month, anchor.day), days: days })
   }
   return weeks
 }
@@ -108,19 +135,47 @@ function sortEvents(list) {
   })
 }
 
-// "09:00–10:30" or "All day" for the list rows.
+// "5:30 PM" from the cache's 24-hour "HH:MM". The panel speaks US English
+// throughout (like the day names), so clock times do too. Anything that is
+// not a plain "HH:MM" is passed through untouched.
+function formatTime12(value) {
+  var text = String(value || "")
+  var match = /^(\d{1,2}):(\d{2})/.exec(text)
+  if (!match) return text
+  var hours = Number(match[1])
+  if (!isFinite(hours)) return text
+  var suffix = hours < 12 ? "AM" : "PM"
+  var hour12 = hours % 12
+  if (hour12 === 0) hour12 = 12
+  return hour12 + ":" + match[2] + " " + suffix
+}
+
+// "5:30 PM–7:30 PM" or "All day" for the list rows.
 function timeRangeText(ev) {
   if (ev.allDay) return "All day"
-  var s = String(ev.start || ""), e = String(ev.end || "")
+  var s = formatTime12(ev.start), e = formatTime12(ev.end)
   if (s && e) return s + "–" + e
   return s || e || ""
+}
+
+// Split a "yyyy-MM-dd" key back into parts (month 0-based, JS Date style).
+function parseKey(key) {
+  var parts = String(key || "").split("-")
+  if (parts.length !== 3) return null
+  var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, d = parseInt(parts[2], 10)
+  if (!isFinite(y) || !isFinite(m) || !isFinite(d)) return null
+  return { year: y, month: m, day: d }
 }
 
 if (typeof module !== "undefined") {
   module.exports = {
     dateKey: dateKey,
+    parseKey: parseKey,
     keyForDate: keyForDate,
     normalizedWeekStart: normalizedWeekStart,
+    weekStartSettingName: weekStartSettingName,
+    toggledWeekStart: toggledWeekStart,
+    isoWeek: isoWeek,
     weekdayOrder: weekdayOrder,
     monthGrid: monthGrid,
     stepMonth: stepMonth,
@@ -128,6 +183,7 @@ if (typeof module !== "undefined") {
     hasEvents: hasEvents,
     eventCount: eventCount,
     sortEvents: sortEvents,
+    formatTime12: formatTime12,
     timeRangeText: timeRangeText
   }
 }
