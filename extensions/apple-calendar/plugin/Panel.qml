@@ -91,6 +91,10 @@ Panel {
   readonly property int weekColumnWidth: Style.space(32)
   readonly property int gutterWidth: Style.space(14)
 
+  // Fixed grid width (gutter + 7 day cells + 8 gaps): every consumer uses
+  // this instead of measuring children, so no width binding can loop.
+  readonly property int gridWidth: weekColumnWidth + gutterWidth + 7 * cellWidth + 8 * cellSpacing
+
   function open() {
     refresh()
     root.controller.show()
@@ -192,7 +196,7 @@ Panel {
 
         Column {
           id: calendarColumn
-          width: Math.max(parent.width, gridColumn.width)
+          width: Math.max(parent.width, root.gridWidth)
           spacing: Style.space(8)
 
           // ---- Hero: the selected day. Clicking goes home to today.
@@ -264,6 +268,7 @@ Panel {
 
             Column {
               id: gridColumn
+              width: root.gridWidth
               y: Style.space(18)
               anchors.horizontalCenter: parent.horizontalCenter
               spacing: Style.space(3)
