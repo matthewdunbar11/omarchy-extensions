@@ -132,19 +132,23 @@ def expand_components(components, tz) -> dict:
 
 
 def calendars_from_caldav(client) -> list[tuple[str, object]]:
+    try:
+        principal = client.principal()
+    except Exception as e:
+        print(f"warning: principal lookup failed: {e}", file=sys.stderr)
+        return []
+    try:
+        cals = principal.calendars()
+    except Exception as e:
+        print(f"warning: calendar listing failed: {e}", file=sys.stderr)
+        return []
     out = []
-    for principal in [client]:
+    for cal in cals:
         try:
-            cals = principal.calendars()
-        except Exception as e:
-            print(f"warning: calendar listing failed: {e}", file=sys.stderr)
-            continue
-        for cal in cals:
-            try:
-                name = cal.name or str(cal.url)
-            except Exception:
-                name = "Calendar"
-            out.append((name, cal))
+            name = cal.name or str(cal.url)
+        except Exception:
+            name = "Calendar"
+        out.append((name, cal))
     return out
 
 
