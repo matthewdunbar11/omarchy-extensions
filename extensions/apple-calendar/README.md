@@ -21,16 +21,16 @@ dance, no escrow, no HSM. Nothing is ever written to iCloud (read-only sync).
 ## Install
 
 ```bash
-./omx install apple-calendar            # widget + sync plumbing
-apple-cal-sync login                    # Apple ID + app-specific password
-apple-cal-sync sync                     # first fetch
-./omx install apple-calendar --swap-clock   # replace bar clock (backs up shell.json)
+./omx install apple-calendar
 ```
 
-The swap replaces the `omarchy.clock` bar entry with `omx.apple-calendar`
-(keeping your label format) and the shell hot-reloads. Or swap manually:
-point any `{"id": "omarchy.clock"}` entry at `omx.apple-calendar`
-(`omarchy plugin enable omx.apple-calendar` also works once files are in place).
+On install the hook asks two questions (TTY only; scripted runs say no):
+1. Replace the bar's `omarchy.clock` entry? (backup kept next to
+   `shell.json`, shell hot-reloads; your label format is preserved.
+   `--swap-clock` / `--no-swap-clock` force it.)
+2. Sign in now? Runs `apple-cal-sync login` (Apple ID + app-specific
+   password from appleid.apple.com) followed by a first `sync`.
+   (`--login` / `--no-login` force it.)
 
 Python deps (`caldav`, `icalendar`, `recurring-ical-events`) are pip-installed
 `--user` by the hook if missing.
@@ -38,8 +38,7 @@ Python deps (`caldav`, `icalendar`, `recurring-ical-events`) are pip-installed
 ## Uninstall
 
 ```bash
-./omx uninstall apple-calendar            # code gone; credentials + cache kept
-./extensions/apple-calendar/uninstall.sh --purge   # also delete credentials + cache
+./omx uninstall apple-calendar            # asks about purging credentials + cache
 ```
 
 Point the bar back at `omarchy.clock` if you swapped (a `shell.json.bak.*`

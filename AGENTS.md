@@ -22,6 +22,10 @@ not only shell plugins), managed by the `omx` TUI. Extensions own the how
   pieces (`|| true` on systemctl/rm paths that may not exist).
 - `status.sh` MUST exit 0 + one line if installed, nonzero otherwise, and
   MUST NOT have side effects.
+- Hooks own their questions: ask on a TTY (`[[ -t 0 ]]`), honor explicit
+  flags (`--swap-clock/--no-swap-clock`, `--purge/--keep-data` style), and
+  take safe defaults when non-interactive (no swap, keep data). `omx` never
+  forwards flags — it only fans out.
 - `omx` sources `meta.sh` in a subshell and must work with or without gum
   (select fallback); keep that fallback working.
 
