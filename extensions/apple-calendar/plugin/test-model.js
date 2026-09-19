@@ -32,6 +32,24 @@ assert.strictEqual(M.monthGrid(2026, 8, 0, "")[0].days[0].key, "2026-08-30");
 // Feb leap year still 6 rows.
 assert.strictEqual(M.monthGrid(2024, 1, 1, "").length, 6);
 
+// ISO week numbers on each row (Thursday-owned), matching the stock clock.
+assert.strictEqual(M.isoWeek(2026, 0, 1), 1);
+assert.strictEqual(M.isoWeek(2025, 11, 29), 1);
+assert.strictEqual(M.isoWeek(2026, 8, 19), 38);
+assert.strictEqual(M.isoWeek(2026, 11, 31), 53);
+var allWeeks = M.monthGrid(2026, 8, 1, "2026-09-19");
+assert.strictEqual(allWeeks[0].week, 36);          // row starting Mon Aug 31
+assert.strictEqual(allWeeks[2].week, 38);          // row holding Sat Sep 19
+var weekByDay = {};
+allWeeks.forEach(function(w) { w.days.forEach(function(d) { weekByDay[d.key] = w.week; }); });
+assert.strictEqual(weekByDay["2026-09-19"], 38);
+
+// Week-start toggle: Monday <-> Sunday, and the setting name written back.
+assert.strictEqual(M.toggledWeekStart(1), 0);
+assert.strictEqual(M.toggledWeekStart(0), 1);
+assert.strictEqual(M.weekStartSettingName(1), "monday");
+assert.strictEqual(M.weekStartSettingName(0), "sunday");
+
 // stepMonth across year boundary.
 assert.deepStrictEqual(M.stepMonth(2026, 11, 1), { year: 2027, month: 0 });
 assert.deepStrictEqual(M.stepMonth(2026, 0, -1), { year: 2025, month: 11 });
