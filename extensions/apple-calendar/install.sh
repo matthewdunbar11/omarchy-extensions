@@ -111,14 +111,19 @@ EOF
   echo "Backup: $BACKUP (shell hot-reloads the layout)"
 fi
 
-# 5. Optional: sign in + first sync right away (read-only CalDAV fetch).
+# 5. Sign in only when asked for (config persists across reinstalls).
 if [[ $LOGIN == yes ]]; then
-  if "$HOME/.local/bin/apple-cal-sync" login; then
-    "$HOME/.local/bin/apple-cal-sync" sync || true
-  fi
+  "$HOME/.local/bin/apple-cal-sync" login || true
+fi
+
+# 6. First sync, ALWAYS attempted when credentials exist. Install-from-TUI
+#    must leave a working extension with no manual follow-ups; failures are
+#    fine — the 15-minute timer retries and the panel has a refresh button.
+if [[ -f $HOME/.config/apple-calendar/config ]] \
+  && "$HOME/.local/bin/apple-cal-sync" sync --quiet 2>/dev/null; then
+  echo "First sync done — events are on their way to the panel."
 else
-  echo "When ready: apple-cal-sync login   (APP-SPECIFIC password from appleid.apple.com)"
-  echo "            apple-cal-sync sync"
+  echo "First sync pending (automatic every 15 min, or press the panel's refresh button)."
 fi
 
 echo "apple-calendar installed."

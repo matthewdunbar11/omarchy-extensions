@@ -540,7 +540,7 @@ Panel {
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
             textFormat: Text.PlainText
-            text: "No iCloud events yet — run cal_sync.py login, then sync."
+            text: "No iCloud events yet — syncing in the background, or press ↻ above."
             color: Qt.darker(root.contentForeground, 1.6)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
