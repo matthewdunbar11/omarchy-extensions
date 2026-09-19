@@ -44,6 +44,11 @@ extensions/
 |------|------|-------------|
 | [agent-usage-opencode](extensions/agent-usage-opencode/) | agents-panel collector | "Opencode Go" usage record (API limits + local stats) for the stock agents widget |
 
+## For agents
+
+- [AGENTS.md](AGENTS.md) — repo working instructions (contract, verification, safety).
+- [skills/omarchy-extensions/SKILL.md](skills/omarchy-extensions/SKILL.md) — loadable skill (symlinked to `~/.agents/skills/`).
+
 ## Adding an extension
 
 1. Create `extensions/<name>/` with the files and a README (what/why/how to install/how to uninstall).
