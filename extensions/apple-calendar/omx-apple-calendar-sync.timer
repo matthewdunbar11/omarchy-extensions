@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh iCloud calendar cache every 15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+Unit=omx-apple-calendar-sync.service
+
+[Install]
+WantedBy=timers.target

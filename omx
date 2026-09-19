@@ -87,15 +87,22 @@ cmd_list() {
   done
 }
 
-run_hook() { # name hook
-  local script="$EXT_DIR/$1/$2.sh"
-  [[ -x $script ]] || die "$1 has no executable $2.sh"
-  "$script"
+run_hook() { # name hook [hook-args...]
+  local name=$1 hook=$2
+  shift 2
+  local script="$EXT_DIR/$name/$hook.sh"
+  [[ -x $script ]] || die "$name has no executable $hook.sh"
+  "$script" "$@"
 }
 
-cmd_install() { # name [--yes]
-  local name=$1 yes=0
-  [[ ${2:-} == "--yes" ]] && yes=1
+# Extra args (besides --yes, which omx consumes) are forwarded to the hook,
+# e.g. `omx install apple-calendar --swap-clock`.
+cmd_install() { # name [hook-args...] [--yes]
+  local name=$1 hook_args=() yes=0 a
+  shift
+  for a in "$@"; do
+    if [[ $a == "--yes" ]]; then yes=1; else hook_args+=("$a"); fi
+  done
   [[ -f $EXT_DIR/$name/meta.sh ]] || die "unknown extension: $name"
   if (( ! yes )); then
     if (( HAVE_GUM )); then
@@ -105,12 +112,15 @@ cmd_install() { # name [--yes]
       [[ $ans == [yY]* ]] || die "aborted"
     fi
   fi
-  run_hook "$name" install
+  run_hook "$name" install "${hook_args[@]}"
 }
 
-cmd_uninstall() { # name [--yes]
-  local name=$1 yes=0
-  [[ ${2:-} == "--yes" ]] && yes=1
+cmd_uninstall() { # name [hook-args...] [--yes]
+  local name=$1 hook_args=() yes=0 a
+  shift
+  for a in "$@"; do
+    if [[ $a == "--yes" ]]; then yes=1; else hook_args+=("$a"); fi
+  done
   [[ -f $EXT_DIR/$name/meta.sh ]] || die "unknown extension: $name"
   if (( ! yes )); then
     if (( HAVE_GUM )); then
@@ -120,7 +130,7 @@ cmd_uninstall() { # name [--yes]
       [[ $ans == [yY]* ]] || die "aborted"
     fi
   fi
-  run_hook "$name" uninstall
+  run_hook "$name" uninstall "${hook_args[@]}"
 }
 
 tui() {
@@ -202,8 +212,8 @@ tui() {
 case ${1:-tui} in
   tui) tui ;;
   list) cmd_list ;;
-  install) [[ -n ${2:-} ]] || die "usage: omx install <name> [--yes]"; cmd_install "$2" "${3:-}" ;;
-  uninstall) [[ -n ${2:-} ]] || die "usage: omx uninstall <name> [--yes]"; cmd_uninstall "$2" "${3:-}" ;;
+  install) [[ -n ${2:-} ]] || die "usage: omx install <name> [hook-args...] [--yes]"; n=$2; shift 2; cmd_install "$n" "$@" ;;
+  uninstall) [[ -n ${2:-} ]] || die "usage: omx uninstall <name> [hook-args...] [--yes]"; n=$2; shift 2; cmd_uninstall "$n" "$@" ;;
   status) [[ -n ${2:-} ]] || die "usage: omx status <name>"; state_of "$2" ;;
   -h|--help|help) sed -n '2,10p' "$0" ;;
   *) die "unknown command: $1 (try: omx, list, install, uninstall, status)" ;;
