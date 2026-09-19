@@ -43,6 +43,7 @@ extensions/
 | Name | Kind | Description |
 |------|------|-------------|
 | [agent-usage-opencode](extensions/agent-usage-opencode/) | agents-panel collector | "Opencode Go" usage record (API limits + local stats) for the stock agents widget |
+| [apple-calendar](extensions/apple-calendar/) | bar-widget (clock replacement) | Date/time label + iCloud month grid: dots on busy days, click for events |
 
 ## For agents
 

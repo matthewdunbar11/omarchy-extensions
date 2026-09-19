@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "omx.apple-calendar",
+  "name": "Apple Calendar",
+  "version": "0.1.0",
+  "author": "omarchy-extensions",
+  "description": "Date/time label with an iCloud-events month grid: dots on busy days, click a day for its events",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Apple Calendar",
+    "description": "Date/time label with an iCloud-events month grid",
+    "category": "Time",
+    "allowMultiple": false
+  }
+}
