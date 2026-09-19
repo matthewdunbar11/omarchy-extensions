@@ -1,0 +1,9 @@
+#!/bin/bash
+# apple-cal-sync entrypoint: runs the extension's cal_sync.py with the private
+# venv when present, system python3 otherwise.
+APPDIR="${XDG_DATA_HOME:-$HOME/.local/share}/omx/apple-calendar"
+if [[ -x "$APPDIR/.venv/bin/python" ]]; then
+  exec "$APPDIR/.venv/bin/python" "$APPDIR/cal_sync.py" "$@"
+else
+  exec python3 "$APPDIR/cal_sync.py" "$@"
+fi

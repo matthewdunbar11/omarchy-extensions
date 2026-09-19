@@ -10,7 +10,8 @@ if systemctl --user is-enabled -q omx-apple-calendar-sync.timer 2>/dev/null; the
 else
   bits+=("timer off")
 fi
-if python3 -c "import caldav" 2>/dev/null; then
+VPY="${XDG_DATA_HOME:-$HOME/.local/share}/omx/apple-calendar/.venv/bin/python"
+if [[ -x $VPY ]] && "$VPY" -c "import caldav" 2>/dev/null; then
   bits+=("sync ready")
 else
   bits+=("missing python deps")

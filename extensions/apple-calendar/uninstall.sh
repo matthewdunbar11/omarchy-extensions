@@ -24,6 +24,7 @@ fi
 systemctl --user disable --now omx-apple-calendar-sync.timer 2>/dev/null || true
 
 rm -rf "$HOME/.config/omarchy/plugins/$PLUGIN_ID"
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/omx/apple-calendar"
 rm -f "$HOME/.config/systemd/user/omx-apple-calendar-sync.service" \
   "$HOME/.config/systemd/user/omx-apple-calendar-sync.timer" \
   "$HOME/.local/bin/apple-cal-sync"

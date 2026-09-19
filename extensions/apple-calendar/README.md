@@ -13,7 +13,8 @@ dance, no escrow, no HSM. Nothing is ever written to iCloud (read-only sync).
 | Path | Installed to |
 |------|--------------|
 | `plugin/` (manifest, BarWidget, Panel, CalendarModel.js) | `~/.config/omarchy/plugins/omx.apple-calendar/` |
-| `sync/cal_sync.py` | `~/.local/bin/apple-cal-sync` |
+| `sync/cal_sync.py` | `~/.local/share/omx/apple-calendar/` + private `.venv` there |
+| `apple-cal-sync` (shim) | `~/.local/bin/` (prefers the venv, falls back to system python3) |
 | `omx-apple-calendar-sync.{service,timer}` | `~/.config/systemd/user/` (cache refresh, 15 min) |
 | cache `events.json` | `~/.local/state/omx/apple-calendar/` |
 | config (0600) | `~/.config/apple-calendar/config` |
@@ -32,8 +33,9 @@ On install the hook asks two questions (TTY only; scripted runs say no):
    password from appleid.apple.com) followed by a first `sync`.
    (`--login` / `--no-login` force it.)
 
-Python deps (`caldav`, `icalendar`, `recurring-ical-events`) are pip-installed
-`--user` by the hook if missing.
+Python deps (`caldav`, `icalendar`, `recurring-ical-events`) live in a private
+venv under `~/.local/share/omx/apple-calendar/` — created by the hook, no
+sudo, nothing system-wide. System python needs nothing (not even pip).
 
 ## Uninstall
 
