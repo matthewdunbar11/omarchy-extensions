@@ -5,9 +5,29 @@ shell plugins: collectors, background programs, browser integrations,
 customizations — anything that improves the Omarchy desktop.
 
 Each extension lives in its own directory under `extensions/` with everything
-needed to install it. A top-level TUI manager (install/uninstall per
-extension) is on the roadmap; until then, each extension's README documents
-manual install steps.
+needed to install it. The [`omx`](omx) manager provides a TUI + CLI over them:
+
+```bash
+./omx              # interactive picker (extension -> install/uninstall/status)
+./omx list
+./omx install agent-usage-opencode
+./omx uninstall agent-usage-opencode --yes
+```
+
+## Extension contract
+
+An extension is a directory `extensions/<name>/` containing:
+
+| File | Required | Purpose |
+|------|----------|---------|
+| `meta.sh` | yes | `NAME=`, `KIND=`, `DESC=`, `VERSION=` (sourced, keep it assignments-only) |
+| `install.sh` | yes | idempotent install into user space (`$HOME`-relative, no sudo) |
+| `uninstall.sh` | yes | complete removal incl. state; tolerate missing pieces (`\|\| true`) |
+| `status.sh` | yes | exit 0 + one-line state if installed, nonzero otherwise |
+| `README.md` | yes | what/why + manager and manual install/uninstall steps |
+
+Rules: user-space only (`~/.local/bin`, `~/.config/systemd/user`,
+`~/.config/omarchy`) — never `/usr/share/omarchy/`, never sudo.
 
 ## Layout
 

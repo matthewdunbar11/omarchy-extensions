@@ -20,6 +20,14 @@ No secrets embedded — the API key is read from env (`OPENCODE_GO_API_KEY`,
 
 ## Install
 
+Via the manager (from repo root):
+
+```bash
+./omx install agent-usage-opencode
+```
+
+Manual fallback:
+
 ```bash
 cd extensions/agent-usage-opencode
 install -m 0755 omarchy-agent-usage-opencode ~/.local/bin/

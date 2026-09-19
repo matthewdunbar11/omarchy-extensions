@@ -1,0 +1,123 @@
+#!/bin/bash
+# omx — TUI manager for omarchy-extensions.
+# Extensions own the how (install.sh/uninstall.sh/status.sh); this fans out.
+#
+#   omx                  # interactive TUI (gum, with select fallback)
+#   omx list             # table of extensions + state
+#   omx install <name> [--yes]
+#   omx uninstall <name> [--yes]
+#   omx status <name>
+set -euo pipefail
+
+OMX_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+EXT_DIR="$OMX_ROOT/extensions"
+HAVE_GUM=0
+command -v gum >/dev/null 2>&1 && HAVE_GUM=1
+
+die() { echo "omx: $*" >&2; exit 1; }
+
+extensions() {
+  local d
+  for d in "$EXT_DIR"/*/; do
+    [[ -f ${d}meta.sh ]] || continue
+    basename "$d"
+  done | sort
+}
+
+meta() { # name VAR -> prints value of VAR from meta.sh
+  ( # subshell: sourcing must not leak
+    set -a
+    # shellcheck disable=SC1090
+    source "$EXT_DIR/$1/meta.sh"
+    printf '%s' "${!2:-}"
+  )
+}
+
+state_of() { # name -> one line, never fails
+  local out
+  if out=$("$EXT_DIR/$1/status.sh" 2>/dev/null); then
+    printf '%s' "$out"
+  else
+    echo "not installed"
+  fi
+}
+
+cmd_list() {
+  local n
+  printf '%-28s %-24s %s\n' "NAME" "KIND" "STATE"
+  for n in $(extensions); do
+    printf '%-28s %-24s %s\n' "$n" "$(meta "$n" KIND)" "$(state_of "$n")"
+  done
+}
+
+run_hook() { # name hook
+  local script="$EXT_DIR/$1/$2.sh"
+  [[ -x $script ]] || die "$1 has no executable $2.sh"
+  "$script"
+}
+
+cmd_install() { # name [--yes]
+  local name=$1 yes=0
+  [[ ${2:-} == "--yes" ]] && yes=1
+  [[ -f $EXT_DIR/$name/meta.sh ]] || die "unknown extension: $name"
+  if (( ! yes )); then
+    if (( HAVE_GUM )); then
+      gum confirm "Install $name?" || die "aborted"
+    else
+      read -rp "Install $name? [y/N] " ans
+      [[ $ans == [yY]* ]] || die "aborted"
+    fi
+  fi
+  run_hook "$name" install
+}
+
+cmd_uninstall() { # name [--yes]
+  local name=$1 yes=0
+  [[ ${2:-} == "--yes" ]] && yes=1
+  [[ -f $EXT_DIR/$name/meta.sh ]] || die "unknown extension: $name"
+  if (( ! yes )); then
+    if (( HAVE_GUM )); then
+      gum confirm "Uninstall $name? (removes its files + state)" || die "aborted"
+    else
+      read -rp "Uninstall $name? [y/N] " ans
+      [[ $ans == [yY]* ]] || die "aborted"
+    fi
+  fi
+  run_hook "$name" uninstall
+}
+
+tui() {
+  local names=() display=() n pick action
+  for n in $(extensions); do
+    names+=("$n")
+    display+=("$n  [$(meta "$n" KIND)] — $(state_of "$n")")
+  done
+  [[ ${#names[@]} -gt 0 ]] || die "no extensions found in $EXT_DIR"
+
+  if (( HAVE_GUM )); then
+    pick=$(printf '%s\n' "${display[@]}" | gum choose --header "omarchy-extensions") || exit 0
+    n=${pick%%  *}
+    action=$(printf 'install\nuninstall\nstatus\n' | gum choose --header "$n") || exit 0
+  else
+    echo "omarchy-extensions (gum not found, simple menu)"
+    select pick in "${display[@]}"; do n=${pick%%  *}; break; done
+    select action in install uninstall status; do break; done
+  fi
+
+  case $action in
+    install) cmd_install "$n" ;;
+    uninstall) cmd_uninstall "$n" ;;
+    status) state_of "$n" ;;
+    *) die "unknown action: $action" ;;
+  esac
+}
+
+case ${1:-tui} in
+  tui) tui ;;
+  list) cmd_list ;;
+  install) [[ -n ${2:-} ]] || die "usage: omx install <name> [--yes]"; cmd_install "$2" "${3:-}" ;;
+  uninstall) [[ -n ${2:-} ]] || die "usage: omx uninstall <name> [--yes]"; cmd_uninstall "$2" "${3:-}" ;;
+  status) [[ -n ${2:-} ]] || die "usage: omx status <name>"; state_of "$2" ;;
+  -h|--help|help) sed -n '2,10p' "$0" ;;
+  *) die "unknown command: $1 (try: omx, list, install, uninstall, status)" ;;
+esac
