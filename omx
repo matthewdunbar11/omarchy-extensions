@@ -21,6 +21,33 @@ command -v gum >/dev/null 2>&1 && HAVE_GUM=1
 
 die() { echo "omx: $*" >&2; exit 1; }
 
+# --- style helpers (plain text when gum is missing) ---
+ACCENT=99
+GREEN=82
+RED=196
+DIM=245
+
+sty() { # fg text
+  if (( HAVE_GUM )); then gum style --foreground "$1" "$2"; else printf '%s' "$2"; fi
+}
+
+banner() {
+  if (( HAVE_GUM )); then
+    gum style --border rounded --border-foreground $ACCENT --padding "0 2" --margin "0 0 1 0" \
+      "$(gum style --foreground $ACCENT --bold '✳ omarchy-extensions')  $(gum style --faint 'collectors · programs · customizations')"
+  else
+    echo "== omarchy-extensions =="
+  fi
+}
+
+state_badge() { # raw-state -> colored short badge
+  if [[ $1 == installed* ]]; then
+    sty $GREEN "● $1"
+  else
+    sty $DIM "○ $1"
+  fi
+}
+
 extensions() {
   local d
   for d in "$EXT_DIR"/*/; do
@@ -48,10 +75,15 @@ state_of() { # name -> one line, never fails
 }
 
 cmd_list() {
-  local n
+  local n st
   printf '%-28s %-24s %s\n' "NAME" "KIND" "STATE"
   for n in $(extensions); do
-    printf '%-28s %-24s %s\n' "$n" "$(meta "$n" KIND)" "$(state_of "$n")"
+    st=$(state_of "$n")
+    if (( HAVE_GUM )) && [[ -t 1 ]]; then
+      printf '%-28s %-24s %s\n' "$n" "$(meta "$n" KIND)" "$(state_badge "$st")"
+    else
+      printf '%-28s %-24s %s\n' "$n" "$(meta "$n" KIND)" "$st"
+    fi
   done
 }
 
@@ -92,27 +124,77 @@ cmd_uninstall() { # name [--yes]
 }
 
 tui() {
-  local names=() display=() n pick action
+  local names=() display=() n pick action desc st out
   for n in $(extensions); do
     names+=("$n")
-    display+=("$n  [$(meta "$n" KIND)] — $(state_of "$n")")
+    desc=$(meta "$n" DESC)
+    st=$(state_of "$n")
+    if (( HAVE_GUM )); then
+      display+=("$n — $desc $(state_badge "$st")")
+    else
+      display+=("$n  [$(meta "$n" KIND)] — $st")
+    fi
   done
   [[ ${#names[@]} -gt 0 ]] || die "no extensions found in $EXT_DIR"
 
   if (( HAVE_GUM )); then
-    pick=$(printf '%s\n' "${display[@]}" | gum choose --header "omarchy-extensions") || exit 0
-    n=${pick%%  *}
-    action=$(printf 'install\nuninstall\nstatus\n' | gum choose --header "$n") || exit 0
+    banner
+    pick=$(printf '%s\n' "${display[@]}" | gum choose --cursor "➜ " \
+      --cursor.foreground "$ACCENT" --header "$(sty $DIM 'Select extension')") || exit 0
+    n=${pick%% — *}
+    action=$(printf 'Install\nUninstall\nStatus\n' | gum choose --cursor "➜ " \
+      --cursor.foreground "$ACCENT" --header "$(sty $DIM "$n — pick action")") || exit 0
   else
-    echo "omarchy-extensions (gum not found, simple menu)"
+    banner
     select pick in "${display[@]}"; do n=${pick%%  *}; break; done
-    select action in install uninstall status; do break; done
+    select action in Install Uninstall Status; do break; done
   fi
 
   case $action in
-    install) cmd_install "$n" ;;
-    uninstall) cmd_uninstall "$n" ;;
-    status) state_of "$n" ;;
+    Install*)
+      if (( HAVE_GUM )); then
+        gum confirm --affirmative "Install" --negative "Cancel" \
+          "Install $n? ($(meta "$n" DESC))" || { sty $DIM "cancelled"; echo; exit 0; }
+        out=$(mktemp)
+        if gum spin --spinner globe --title "Installing $n…" \
+            -- "$EXT_DIR/$n/install.sh" >"$out" 2>&1; then
+          gum style --foreground $GREEN --bold "✓ $n installed"
+          sty $DIM "  $(state_of "$n")"; echo
+        else
+          gum style --foreground $RED --bold "✗ install failed"
+          cat "$out"
+        fi
+        rm -f "$out"
+      else
+        cmd_install "$n"
+      fi
+      ;;
+    Uninstall*)
+      if (( HAVE_GUM )); then
+        gum confirm --affirmative "Uninstall" --negative "Keep" \
+          "Uninstall $n? Removes its files + state." || { sty $DIM "cancelled"; echo; exit 0; }
+        out=$(mktemp)
+        if gum spin --spinner globe --title "Uninstalling $n…" \
+            -- "$EXT_DIR/$n/uninstall.sh" >"$out" 2>&1; then
+          gum style --foreground $GREEN --bold "✓ $n uninstalled"
+        else
+          gum style --foreground $RED --bold "✗ uninstall failed"
+          cat "$out"
+        fi
+        rm -f "$out"
+      else
+        cmd_uninstall "$n"
+      fi
+      ;;
+    Status*)
+      if (( HAVE_GUM )); then
+        gum style --border rounded --border-foreground $ACCENT --padding "0 2" --margin "1 0" \
+          "$(gum style --bold "$n")" "$(sty $DIM "$(meta "$n" KIND) · v$(meta "$n" VERSION)")" \
+          "$(state_badge "$(state_of "$n")")"
+      else
+        state_of "$n"
+      fi
+      ;;
     *) die "unknown action: $action" ;;
   esac
 }
