@@ -5,6 +5,8 @@ var M = require("./CalendarModel.js");
 // dateKey: month is 0-based.
 assert.strictEqual(M.dateKey(2026, 0, 5), "2026-01-05");
 assert.strictEqual(M.dateKey(2026, 8, 19), "2026-09-19");
+assert.deepStrictEqual(M.parseKey("2026-09-19"), { year: 2026, month: 8, day: 19 });
+assert.strictEqual(M.parseKey("nope"), null);
 
 // monthGrid: always 6x7, keys unique + sequential.
 var weeks = M.monthGrid(2026, 8, 1, "2026-09-19");

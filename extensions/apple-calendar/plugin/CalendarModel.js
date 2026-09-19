@@ -116,9 +116,19 @@ function timeRangeText(ev) {
   return s || e || ""
 }
 
+// Split a "yyyy-MM-dd" key back into parts (month 0-based, JS Date style).
+function parseKey(key) {
+  var parts = String(key || "").split("-")
+  if (parts.length !== 3) return null
+  var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10) - 1, d = parseInt(parts[2], 10)
+  if (!isFinite(y) || !isFinite(m) || !isFinite(d)) return null
+  return { year: y, month: m, day: d }
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     dateKey: dateKey,
+    parseKey: parseKey,
     keyForDate: keyForDate,
     normalizedWeekStart: normalizedWeekStart,
     weekdayOrder: weekdayOrder,

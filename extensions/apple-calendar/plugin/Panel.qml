@@ -35,6 +35,14 @@ Panel {
   property string selectedKey: todayKey
   readonly property var selectedEvents: Cal.eventsForDay(root.eventDays, root.selectedKey)
 
+  // Selected day as a real Date for the hero. Plain root-level properties
+  // (the stock-plugin convention) — nested readonly aliases failed to
+  // resolve on the systems tested.
+  property var selParts: Cal.parseKey(selectedKey) || {
+    year: today.getFullYear(), month: today.getMonth(), day: today.getDate()
+  }
+  property date selDate: new Date(selParts.year, selParts.month, selParts.day)
+
   // ---- iCloud event cache (written by cal_sync.py, see sync/).
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string cachePath: (Quickshell.env("XDG_STATE_HOME") || home + "/.local/state")
@@ -43,6 +51,7 @@ Panel {
   property var eventDays: ({})
   property bool cacheReady: false
   property string syncedAt: ""
+  property int calCount: 0
 
   function parseCache(content) {
     try {
@@ -50,12 +59,21 @@ Panel {
       if (parsed && typeof parsed === "object" && parsed.days && typeof parsed.days === "object") {
         root.eventDays = parsed.days
         root.syncedAt = String(parsed.synced_at || "")
+        root.calCount = Number(parsed.calendars || 0)
         root.cacheReady = true
         return
       }
     } catch (e) { /* fall through to not-ready */ }
     root.eventDays = ({})
     root.cacheReady = false
+  }
+
+  function syncLine() {
+    if (!root.cacheReady || root.syncedAt === "") return ""
+    var when = new Date(root.syncedAt)
+    var stamp = isFinite(when.getTime()) ? Qt.formatDateTime(when, "h:mm AP") : ""
+    var cals = root.calCount > 0 ? " · " + root.calCount + (root.calCount === 1 ? " calendar" : " calendars") : ""
+    return "Synced" + (stamp !== "" ? " " + stamp : "") + cals
   }
 
   FileView {
@@ -196,10 +214,14 @@ Panel {
 
         Column {
           id: calendarColumn
-          width: Math.max(parent.width, root.gridWidth)
+          // Anchored to the panel's FIXED content width, never to the
+          // Flickable: measuring the viewport that measures us is what loops.
+          width: Math.max(panel.contentWidth, root.gridWidth)
           spacing: Style.space(8)
 
-          // ---- Hero: the selected day. Clicking goes home to today.
+          // ---- Hero: compact by design — a giant day number beside a
+          //      weekday/month stack. Never wider than the grid, so long
+          //      month names can't overflow the panel. Click goes home.
           Item {
             width: parent.width
             height: heroRow.height
@@ -207,31 +229,52 @@ Panel {
             Row {
               id: heroRow
               anchors.horizontalCenter: parent.horizontalCenter
-              spacing: Style.space(22)
+              spacing: Style.space(14)
 
               Text {
-                anchors.baseline: heroDate.baseline
-                text: "󰃭"
+                anchors.verticalCenter: parent.verticalCenter
+                textFormat: Text.PlainText
+                text: root.selDate.getDate()
                 color: heroMouse.containsMouse
                   ? Style.hoverStateColor(root.contentForeground, Color.accent)
                   : root.contentForeground
                 font.family: root.contentFontFamily
-                font.pixelSize: 48
+                font.pixelSize: 64
+                font.bold: true
               }
 
-              Text {
-                id: heroDate
-                textFormat: Text.PlainText
+              Column {
                 anchors.verticalCenter: parent.verticalCenter
-                text: root.selectedLabel() === "Today"
-                  ? Qt.formatDate(root.today, "MMMM d")
-                  : root.selectedLabel()
-                color: heroMouse.containsMouse
-                  ? Style.hoverStateColor(root.contentForeground, Color.accent)
-                  : root.contentForeground
-                font.family: root.contentFontFamily
-                font.pixelSize: 44
-                font.bold: true
+                spacing: Style.space(2)
+
+                Text {
+                  textFormat: Text.PlainText
+                  text: Qt.formatDate(root.selDate, "dddd").toUpperCase()
+                  color: Style.selectedStateColor(root.contentForeground, Color.accent)
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.caption
+                  font.letterSpacing: 2
+                  font.bold: true
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  text: Qt.formatDate(root.selDate, "MMMM yyyy")
+                  color: Qt.darker(root.contentForeground, 1.4)
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.body
+                }
+
+                Text {
+                  textFormat: Text.PlainText
+                  visible: root.selectedEvents.length > 0
+                  text: root.selectedEvents.length === 1
+                    ? "1 event"
+                    : root.selectedEvents.length + " events"
+                  color: Qt.darker(root.contentForeground, 1.7)
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.caption
+                }
               }
             }
 
@@ -544,6 +587,17 @@ Panel {
             color: Qt.darker(root.contentForeground, 1.6)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
+          }
+
+          // ---- Freshness footer, whisper-quiet.
+          Text {
+            visible: root.syncLine() !== ""
+            anchors.horizontalCenter: parent.horizontalCenter
+            textFormat: Text.PlainText
+            text: root.syncLine()
+            color: Qt.darker(root.contentForeground, 1.9)
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.caption
           }
         }
       }
